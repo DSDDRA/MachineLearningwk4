@@ -82,25 +82,25 @@ Next, on both the training and the testing data, removal of first 7 of the 60 da
        dim(pmlTrn)
        dim(pmlTst)
 # Create Normalize Function and apply to training and testing set
-       normalize <- function(x) {
-              num <- x - min(x)
-              denom <- max(x) - min(x)
-              return (num/denom)
-       }
+#       normalize <- function(x) {
+#              num <- x - min(x)
+#              denom <- max(x) - min(x)
+#              return (num/denom)
+#       }
 #      
 # Normalize the data (minus the classe/problem_id)
-       tstNorm<-as.data.frame(lapply(pmlTst[1:52], normalize))
-       trnNorm<-as.data.frame(lapply(pmlTrn[1:52], normalize))
+#       tstNorm<-as.data.frame(lapply(pmlTst[1:52], normalize))
+#       trnNorm<-as.data.frame(lapply(pmlTrn[1:52], normalize))
 # Add problem_id/classe back to normalized data
-       tstNorm$problem_id <- pmlTst$problem_id
-           trnNorm$classe <- pmlTrn$classe
+#       tstNorm$problem_id <- pmlTst$problem_id
+#           trnNorm$classe <- pmlTrn$classe
 # Get understanding of the classe variable in the training data set          
-           levels (as.factor(trnNorm$classe))
+           levels (as.factor(pmlTrn$classe))
        
 # Split trnNorm into training and Validation at a 70%/30% rate
-          inTrain <- createDataPartition(trnNorm$classe, p = 0.7, list = FALSE)
-         training <- trnNorm[inTrain, ]
-       validation <- trnNorm[-inTrain, ]
+          inTrain <- createDataPartition(pmlTrn$classe, p = 0.7, list = FALSE)
+         training <- pmlTrn[inTrain, ]
+       validation <- pmlTrn[-inTrain, ]
 ```
 # Step 3. Visualize the data
 ```{r visualize data}
@@ -124,7 +124,7 @@ Repeated cross validation is used in the trainControl specification, again in an
 # Set random seed for reproducibility
        set.seed(1234)
 # Assign trainControl attributes to limit the number used in the classification. I will use 5-fold repeated crossvalidation to estimate accuracy.
-       ctrl<- trainControl(method="repeatedcv",number=5)
+       ctrl<- trainControl(method="cv",number=10)
        modFitTree <- train(classe ~ ., data=training, method="rpart", trControl=ctrl)
        modFitTree 
        print(modFitTree$finalModel)
@@ -188,14 +188,14 @@ The accuracy for the Ranger implementation of Random Forest is very good at .997
 Finally, using the Ranger Random Forest to predict against the normalized testing data:
 
 ```{r Predict using  Ranger Random Forest}
-       ans3<-predict(modFitRRF,tstNorm)
+       ans3<-predict(modFitRRF,pmlTst)
        ans3
        summary(ans3)
 ```
    
 # Discussion of Findings
    
-A judgement call was made to normilze the data, while this was not rigoursly tested against non-normailzed data, it appears to be a sound call. The application of simple Trees yielded a prediction capability similar to a coin toss, and thus not a preferred implementation of ML. The Random Forest approach was then applied using the Ranger package, and the accuracy went to 99.7%.  The Ranger package is a rapid implementation of RF, and was implemented for time saving. This model was ultimately used to predict using the testing data.    
+Three ML approaches to model building were tried, rpart (Trees) , KNN and Ranger Random forest.  A judgement call was made to normalize the data, while this was not rigoursly tested against non-normalized data, it appears to be a sound call. The application of simple Trees yielded a prediction capability similar to a coin toss, and thus not a preferred implementation of ML. Knn greatly improved results with accuracy ~.92%.  The Random Forest approach was then applied using the Ranger package, and the accuracy went to 99.7%.  The Ranger package is a rapid implementation of RF, and was implemented for time saving. This model was ultimately used to predict using the testing data.    
        
 # References     
        Breiman, L. (2001). Random forests. Mach Learn, 45:5-32. https://doi.org/10.1023/A:1010933404324.
