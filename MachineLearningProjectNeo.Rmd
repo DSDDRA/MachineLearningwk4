@@ -1,0 +1,205 @@
+---
+title: "MachineLearningProject"
+author: "NEO"
+date: "12/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+This is the project for week four of the Machine Learning class that is part of Coursera's Data Science suite. This project will follow steps for machine learning:
+
+1.Define Problem.
+2.Load Data, Sumamrize and Prepare Data.
+3.Visualizing the dataset.
+4.Evaluate Algorithms.
+5.Making some predictions.
+6.Improve Results.
+7.Present Results.
+
+
+
+## Background
+This report describes  model building, cross validation, what the expected out of sample error is, and why I made the choices I did. The prediction model is then used to predict 20 different test cases.
+
+ The Human Activity Recognition (HAR) data used in this project and more information is available from: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.  Participantds were asked to perform barbell lifts correctly and incorrectly in 5 different ways. Data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict the manner in which persons did the exercise. 
+
+
+The libraries included in this project are listed here in the librarySetUp section of R code.
+```{r librarySetUp, results = "hide", warning = FALSE, message = FALSE, echo=TRUE}
+       library(dplyr)
+       library(data.table)
+       library(caret)
+       library(rpart);
+       library(ggplot2)
+       library(randomForest);
+       library(R.utils)
+```
+The code for setting up the local analysis directory, retieving data file and reading in the dataset described and documented below. First, a data directory in the users working directory is created if it does not exist.
+```{r dirSetUP}
+       if(!file.exists('./data')) dir.create('./data')
+```
+Data for the analysis is retrieved using R script. The code for this is included in the report below for purposes of reproduction of this analyisis.
+``` {r Data setUp, results='show'}
+#
+      if(!file.exists('./data/pml-testing.csv')) {
+       fileURL<-'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+       download.file(fileURL, destFile = './data/pml-testing.csv')
+      }
+      if(!file.exists('./data/pml-training.csv')) {
+       fileURL<-'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+       download.file(fileURL, destFile = './data/pml-training.csv')
+      }
+```
+#Step 1. Load the data 
+``` {r Data Process, results='show'}
+
+       fileName = './data/pml-training.csv'
+       pmlTrnData <- read.csv(fileName, na.strings = c("NA", ""), strip.white = TRUE,
+                             stringsAsFactors=FALSE)
+# Uncomment the STR function to get a look at the data.
+##       str(pmlTrnData)
+#       
+       fileName = './data/pml-testing.csv'
+       pmlTstData <- read.csv(fileName, na.strings = c("NA", ""), strip.white = TRUE,
+                             stringsAsFactors=FALSE)
+      
+```
+   
+#Step 2. Preprocess the Data and Create Training and Validation Data Sets
+Clean the data and remove data columns that have no data. This will remove all attributes containing NA:
+Next, on both the training and the testing data, removal of first 7 of the 60 data frame attributes since they are not pertainent attributes or predictors.
+```{r clean data}
+       pmlTraining <- pmlTrnData[ , colSums(is.na(pmlTrnData))==0]
+       pmlTesting  <- pmlTstData[ , colSums(is.na(pmlTstData))==0]
+      
+       pmlTrn <- pmlTraining[ , -c(1:7)]
+       pmlTst <- pmlTesting[ , -c(1:7)]
+# Show the dimension of the data set       
+       dim(pmlTrn)
+       dim(pmlTst)
+# Create Normalize Function and apply to training and testing set
+       normalize <- function(x) {
+              num <- x - min(x)
+              denom <- max(x) - min(x)
+              return (num/denom)
+       }
+#      
+# Normalize the data (minus the classe/problem_id)
+       tstNorm<-as.data.frame(lapply(pmlTst[1:52], normalize))
+       trnNorm<-as.data.frame(lapply(pmlTrn[1:52], normalize))
+# Add problem_id/classe back to normalized data
+       tstNorm$problem_id <- pmlTst$problem_id
+           trnNorm$classe <- pmlTrn$classe
+# Get understanding of the classe variable in the training data set          
+           levels (as.factor(trnNorm$classe))
+       
+# Split trnNorm into training and Validation at a 70%/30% rate
+          inTrain <- createDataPartition(trnNorm$classe, p = 0.7, list = FALSE)
+         training <- trnNorm[inTrain, ]
+       validation <- trnNorm[-inTrain, ]
+```
+# Step 3. Visualize the data
+```{r visualize data}
+# For this paper- ontly the first 4 attributes are plotted       
+         x <- training[,1:4]
+         y <-training[,53]
+         par(mfrow=c(1,4))
+         for(i in 1:4) { boxplot(x[,i], main=names(training)[i])
+         }
+       
+      
+       
+```
+The dim function on the training data shows 52 attributes along with "classe" (53 col total) with 19622 rows, and the testing data has 52 similar attributes along with "problem_id" (53 col total) and 20 rows. The unique function shows that the classe variable has values: "A" "B" "C" "D" "E". \
+
+Due to the size of the data set and attributes, the machine learning methods of Trees and Random Forests will by applied. The best approach will be used to predict using the testing data set.
+Repeated cross validation is used in the trainControl specification, again in an exploratory fashion, and has yielded good results. 
+
+#Step 4. Build Model Trees
+```{r build Trees}
+# Set random seed for reproducibility
+       set.seed(1234)
+# Assign trainControl attributes to limit the number used in the classification. I will use 5-fold repeated crossvalidation to estimate accuracy.
+       ctrl<- trainControl(method="repeatedcv",number=5)
+       modFitTree <- train(classe ~ ., data=training, method="rpart", trControl=ctrl)
+       modFitTree 
+       print(modFitTree$finalModel)
+# Plot Resulting Tree
+       plot(modFitTree$finalModel, uniform=TRUE, main="Classification Tree")
+       text(modFitTree$finalModel, use.n=TRUE, all=TRUE, cex=.8)
+# Now predict using modelFitTrees using the validation Data
+       ans <- predict(modFitTree,newdata=validation)
+       
+           summary(ans)
+
+#  Result from confusionMatrix
+       classe<-as.factor(validation$classe)
+       confTree <- confusionMatrix(classe,ans)
+       confTree
+```
+
+
+Accuracy was used to select the optimal model using the largest value.
+The final value used for the model was cp = 0.03387244.
+
+Next, predict using modelFitTrees and validation data with 
+       ans<-predict(modFitTree,newdata=validation)
+
+   
+The overall statistics as listed above shows ~.5 accuracy, or about the flip of a coin.   
+
+# Step4b. KNN approach 
+```{r KNN}
+       set.seed(1234)
+       modFitKnn <- train(classe ~ ., data=training, method="knn", trControl=ctrl)
+       modFitKnn
+# Use the model for prediction       
+       ansKnn<-predict(modFitKnn,newdata=validation)
+       summary(ansKnn)
+#
+```
+
+# Step4c. Ranger Random Forest approach
+Here, research led to the 'ranger' package for a fast implementation of Random Forest (Breiman 2001) for high dimensional data. The package is automatically installed when running the script.
+```{r build model Ranger Random Forest}
+# Set random seed for reproducibility
+       set.seed(1234)
+      modFitRRF <- train(classe ~ ., data=training,method="ranger", trControl=ctrl)
+      modFitRRF
+# Use the model for prediction       
+       ans2<-predict(modFitRRF,newdata=validation)
+       summary(ans2)
+# Check accuracy using the confusion matrix.       
+       confRRF<-confusionMatrix(classe,ans2)
+       confRRF
+```
+
+Ranger Random Forest.  
+    
+The accuracy for the Ranger implementation of Random Forest is very good at .997.
+
+
+
+# Step 5. Prediction with Ranger Random Forest
+Finally, using the Ranger Random Forest to predict against the normalized testing data:
+
+```{r Predict using  Ranger Random Forest}
+       ans3<-predict(modFitRRF,tstNorm)
+       ans3
+       summary(ans3)
+```
+   
+# Discussion of Findings
+   
+A judgement call was made to normilze the data, while this was not rigoursly tested against non-normailzed data, it appears to be a sound call. The application of simple Trees yielded a prediction capability similar to a coin toss, and thus not a preferred implementation of ML. The Random Forest approach was then applied using the Ranger package, and the accuracy went to 99.7%.  The Ranger package is a rapid implementation of RF, and was implemented for time saving. This model was ultimately used to predict using the testing data.    
+       
+# References     
+       Breiman, L. (2001). Random forests. Mach Learn, 45:5-32. https://doi.org/10.1023/A:1010933404324.
+       
+       Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+       
+
